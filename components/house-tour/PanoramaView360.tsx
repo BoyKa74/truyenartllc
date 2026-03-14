@@ -24,12 +24,14 @@ export type PanoramaView360Props = {
   autoRotate: boolean;
   /** 1 = thuận chiều kim đồng hồ, -1 = ngược chiều */
   rotateDirection?: 1 | -1;
+  /** Nhân tốc độ xoay (1 = gốc, 0.5 = một nửa) */
+  speedMultiplier?: number;
   hotspots?: HotspotItem[];
   /** URL ảnh dùng làm icon cho 4 hotspot (vd. /uploads/b/.../video_1_450.jpg) */
   hotspotIconUrl?: string;
 };
 
-export function PanoramaView360({ src, roomLabel, autoRotate, rotateDirection = 1, hotspots = DEFAULT_HOTSPOTS, hotspotIconUrl }: PanoramaView360Props) {
+export function PanoramaView360({ src, roomLabel, autoRotate, rotateDirection = 1, speedMultiplier = 1, hotspots = DEFAULT_HOTSPOTS, hotspotIconUrl }: PanoramaView360Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [hotspotPositions, setHotspotPositions] = useState<{ id: string; label: string; x: number; y: number; visible: boolean }[]>([]);
   const [fov, setFov] = useState(75);
@@ -41,6 +43,8 @@ export function PanoramaView360({ src, roomLabel, autoRotate, rotateDirection = 
   autoRotateRef.current = autoRotate;
   const rotateDirectionRef = useRef(rotateDirection);
   rotateDirectionRef.current = rotateDirection;
+  const speedMultiplierRef = useRef(speedMultiplier);
+  speedMultiplierRef.current = speedMultiplier;
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -115,7 +119,7 @@ export function PanoramaView360({ src, roomLabel, autoRotate, rotateDirection = 
       if (cam) {
         if (autoRotateRef.current && !isDraggingRef.current) {
           const dir = rotateDirectionRef.current;
-          yawRef.current += AUTO_ROTATE_SPEED * dir;
+          yawRef.current += AUTO_ROTATE_SPEED * speedMultiplierRef.current * dir;
           if (yawRef.current >= 360) yawRef.current -= 360;
           if (yawRef.current < 0) yawRef.current += 360;
         }

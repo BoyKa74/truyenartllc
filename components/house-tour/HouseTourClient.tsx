@@ -114,9 +114,18 @@ const ROOMS = [
   { id: "kitchen1", label: "Kitchen", icon: "🍳" },
 ];
 
-const TRONG_NHA_IDS = ["living1", "living2", "master1", "master2", "master3", "master4", "bath1", "bath2", "kid1", "room1", "kitchen1"];
-const NGOAI_NHA_IDS = ["balcony"];
-const PHONG_IDS = ROOMS.map((r) => r.id);
+// Số nhà trên trang chủ (Featured slideshow)
+const TOTAL_HOUSES = 12;
+// Flow: Portfolio (House 1..12 → Exterior|Interior) | Rooms (Living Room|Bedroom|Bathroom|Kitchen)
+const PORTFOLIO_EXTERIOR_IDS = ["balcony"];
+const PORTFOLIO_INTERIOR_IDS = ["living1", "living2", "master1", "master2", "master3", "master4", "bath1", "bath2", "kid1", "room1", "kitchen1"];
+const ROOM_CATEGORIES = {
+  livingRoom: { label: "Living Room", ids: ["living1", "living2"] },
+  bedroom: { label: "Bedroom", ids: ["master1", "master2", "master3", "master4", "kid1", "room1"] },
+  bathroom: { label: "Bathroom", ids: ["bath1", "bath2"] },
+  kitchen: { label: "Kitchen", ids: ["kitchen1"] },
+} as const;
+type RoomCategoryKey = keyof typeof ROOM_CATEGORIES;
 
 const COLORS = [
   { id: "black", hex: "#1a1a1a", label: "Black" },
@@ -135,15 +144,6 @@ const FLOOR_OPTIONS = [
   { id: "stone", label: "Stone", locked: false },
 ];
 
-const COLLECTIONS = [
-  { label: "First Class B", short: "B", locked: false },
-  { label: "First Class A", short: "BA", locked: true },
-  { label: "Business B", short: "BiB", locked: true },
-  { label: "Business A", short: "BiA", locked: true },
-  { label: "Primary B", short: "PrB", locked: true },
-  { label: "Primary A", short: "PrA", locked: true },
-];
-
 // Phòng trên sơ đồ mặt bằng — click vào sẽ đổi view chính sang phòng đó (roomId = state sidebar)
 const FLOOR_PLAN_ROOMS = [
   { id: "living", label: "Living", roomId: "living1" },
@@ -157,9 +157,11 @@ const FLOOR_PLAN_ROOMS = [
 function SectionTitle({ title, showInfo = true }: { title: string; showInfo?: boolean }) {
   return (
     <div className="flex items-center gap-1.5 mb-3">
-      <h3 className="text-sm font-semibold text-gray-800 uppercase tracking-wide">{title}</h3>
+      <h3 className="text-sm font-bold uppercase tracking-wider text-slate-800 drop-shadow-sm" style={{ textShadow: "0 0 1px rgba(255,255,255,0.8)" }}>
+        {title}
+      </h3>
       {showInfo && (
-        <span className="text-gray-400 text-xs cursor-help w-4 h-4 rounded-full border border-gray-400 flex items-center justify-center" title="Thông tin">i</span>
+        <span className="text-gray-500 text-xs cursor-help w-4 h-4 rounded-full border border-gray-500 flex items-center justify-center" title="Thông tin">i</span>
       )}
     </div>
   );
@@ -207,11 +209,25 @@ function RightIcon({ label, active, icon, onClick }: { label: string; active?: b
   );
 }
 
-const AUTO_ROTATE_SPEED = 0.5; // độ mỗi frame
+const AUTO_ROTATE_SPEED = 0.5; // độ mỗi frame (base)
 const DRAG_SENSITIVITY = 0.5; // 1px kéo = 0.5 độ
 
 /** View 360°: nhiều ảnh theo góc — xoay = đổi ảnh, cảm giác đứng trong phòng quay nhìn nội thất */
-function View360({ images, roomLabel, autoRotate, rotateDirection, baseUrl }: { images: string[]; roomLabel: string; autoRotate: boolean; rotateDirection: 1 | -1; baseUrl: string }) {
+function View360({
+  images,
+  roomLabel,
+  autoRotate,
+  rotateDirection,
+  baseUrl,
+  speedMultiplier = 1,
+}: {
+  images: string[];
+  roomLabel: string;
+  autoRotate: boolean;
+  rotateDirection: 1 | -1;
+  baseUrl: string;
+  speedMultiplier?: number;
+}) {
   const n = images.length;
   const [yaw, setYaw] = useState(0); // 0–360, góc nhìn
   const [isDragging, setIsDragging] = useState(false);
@@ -219,15 +235,17 @@ function View360({ images, roomLabel, autoRotate, rotateDirection, baseUrl }: { 
   const yawRef = useRef(0);
   const directionRef = useRef(rotateDirection);
   directionRef.current = rotateDirection;
+  const speedRef = useRef(speedMultiplier);
+  speedRef.current = speedMultiplier;
   const rafRef = useRef<number>(0);
 
   yawRef.current = yaw;
 
-  // Tự động xoay khi bấm Play (chiều quay theo rotateDirection)
+  // Tự động xoay khi bấm Play (chiều quay theo rotateDirection, tốc độ theo speedMultiplier)
   useEffect(() => {
     if (!autoRotate || isDragging || n === 0) return;
     const tick = () => {
-      yawRef.current += AUTO_ROTATE_SPEED * directionRef.current;
+      yawRef.current += AUTO_ROTATE_SPEED * speedRef.current * directionRef.current;
       if (yawRef.current >= 360) yawRef.current -= 360;
       if (yawRef.current < 0) yawRef.current += 360;
       setYaw(yawRef.current);
@@ -235,7 +253,7 @@ function View360({ images, roomLabel, autoRotate, rotateDirection, baseUrl }: { 
     };
     rafRef.current = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafRef.current);
-  }, [autoRotate, isDragging, n]);
+  }, [autoRotate, isDragging, n, speedMultiplier]);
 
   const onPointerDown = (e: React.PointerEvent) => {
     setIsDragging(true);
@@ -310,133 +328,184 @@ export default function HouseTourClient() {
   const [color, setColor] = useState("black");
   const [furniture, setFurniture] = useState("with");
   const [floor, setFloor] = useState("stone");
-  const [collection, setCollection] = useState("First Class B");
   const [rightView, setRightView] = useState<"layout" | "360" | "images" | "spec" | "download">("360");
-  const [isPlaying, setIsPlaying] = useState(false);
+  /** Mặc định phát; một nút bật/tắt Play/Pause. */
+  const [isPlaying, setIsPlaying] = useState(true);
+  /** Mặc định 0.5×. << giảm một nửa, >> tăng gấp đôi (1 = gốc, 0.5, 0.25). */
+  const [speedMultiplier, setSpeedMultiplier] = useState(0.5);
   /** 1 = chiều kim đồng hồ, -1 = ngược chiều. Bấm icon vòng lặp để đổi. */
   const [rotateDirection, setRotateDirection] = useState<1 | -1>(1);
 
   const searchParams = useSearchParams();
-  const tourFromUrl = Math.min(3, Math.max(1, parseInt(searchParams.get("tour") || "1", 10) || 1));
+  const tourFromUrl = Math.min(TOTAL_HOUSES, Math.max(1, parseInt(searchParams.get("tour") || "1", 10) || 1));
   const [houseTourIndex, setHouseTourIndex] = useState(tourFromUrl);
-  type RoomFilter = "trong-nha" | "ngoai-nha" | "phong";
-  const [roomFilter, setRoomFilter] = useState<RoomFilter>("phong");
-  const [trongNhaIndex, setTrongNhaIndex] = useState(0);
-  const [ngoaiNhaIndex, setNgoaiNhaIndex] = useState(0);
-  const [phongIndex, setPhongIndex] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  const filterIds =
-    roomFilter === "trong-nha" ? TRONG_NHA_IDS : roomFilter === "ngoai-nha" ? NGOAI_NHA_IDS : PHONG_IDS;
-  const filteredRooms = ROOMS.filter((r) => filterIds.includes(r.id));
+  // Filter flow: Portfolio | Rooms. Portfolio Section chỉ còn Exterior | Interior (không có Rooms).
+  const [filterMode, setFilterMode] = useState<"portfolio" | "rooms">("portfolio");
+  const [portfolioSection, setPortfolioSection] = useState<"exterior" | "interior">("interior");
+  const [roomCategory, setRoomCategory] = useState<RoomCategoryKey>("livingRoom");
 
-  const switchFilter = (f: RoomFilter) => {
-    setRoomFilter(f);
-    const ids = f === "trong-nha" ? TRONG_NHA_IDS : f === "ngoai-nha" ? NGOAI_NHA_IDS : PHONG_IDS;
-    const list = ROOMS.filter((r) => ids.includes(r.id));
-    if (!ids.includes(room) && list.length > 0) setRoom(list[0].id);
+  const portfolioRoomIds =
+    portfolioSection === "exterior" ? PORTFOLIO_EXTERIOR_IDS : PORTFOLIO_INTERIOR_IDS;
+  const roomsModeRoomIds = ROOM_CATEGORIES[roomCategory].ids;
+  const filteredRooms = ROOMS.filter((r) =>
+    filterMode === "portfolio" ? portfolioRoomIds.includes(r.id) : (roomsModeRoomIds as readonly string[]).includes(r.id)
+  );
+
+  const ensureRoomInList = (ids: readonly string[]) => {
+    if (!ids.includes(room) && ids.length > 0) setRoom(ids[0]);
+  };
+  const switchToPortfolio = (section?: "exterior" | "interior") => {
+    setFilterMode("portfolio");
+    if (section) setPortfolioSection(section);
+    const ids = section === "exterior" ? PORTFOLIO_EXTERIOR_IDS : PORTFOLIO_INTERIOR_IDS;
+    ensureRoomInList(ids);
+  };
+  const switchToRooms = (category?: RoomCategoryKey) => {
+    setFilterMode("rooms");
+    if (category) setRoomCategory(category);
+    ensureRoomInList(ROOM_CATEGORIES[category ?? roomCategory].ids);
   };
 
   useEffect(() => {
     setHouseTourIndex(tourFromUrl);
   }, [tourFromUrl]);
 
-  const goHouseTourPrev = () => setHouseTourIndex((i) => (i <= 1 ? 3 : i - 1));
-  const goHouseTourNext = () => setHouseTourIndex((i) => (i >= 3 ? 1 : i + 1));
+  const goHouseTourPrev = () => setHouseTourIndex((i) => (i <= 1 ? TOTAL_HOUSES : i - 1));
+  const goHouseTourNext = () => setHouseTourIndex((i) => (i >= TOTAL_HOUSES ? 1 : i + 1));
 
-  // Click phòng trên sơ đồ → đổi view chính sang phòng đó (và đồng bộ sidebar)
+  // Click phòng trên sơ đồ → chuyển sang phòng đó, mở view 360° và bật tự xoay để tour chạy (không đứng yên)
   const selectRoomFromFloorPlan = (roomId: string) => {
     setRoom(roomId);
+    setRightView("360");
+    setIsPlaying(true);
   };
 
   return (
-    <div className="min-h-screen flex bg-gray-800 relative">
+    <div className="h-screen relative overflow-hidden bg-gray-900">
       {/* Nút hamburger khi sidebar đóng — mở lại panel Lọc */}
       {!sidebarOpen && (
         <button
           type="button"
           onClick={() => setSidebarOpen(true)}
-          className="fixed left-4 top-1/2 -translate-y-1/2 z-30 w-12 h-12 rounded-xl bg-gray-100/95 backdrop-blur border border-gray-200 shadow-lg flex items-center justify-center text-gray-700 hover:bg-white transition-colors"
+          className="fixed left-4 top-1/2 -translate-y-1/2 z-30 w-12 h-12 rounded-xl bg-white/20 backdrop-blur border border-white/30 shadow-lg flex items-center justify-center text-gray-800 hover:bg-white/40 transition-colors"
           aria-label="Mở bảng lọc"
         >
           <span className="text-xl font-bold" style={{ fontFamily: "ui-sans-serif" }}>≡</span>
         </button>
       )}
 
-      {/* Left Sidebar - frosted panel */}
+      {/* Left Sidebar — nền nâu (#c4b5a5) opacity 30% + blur để thấy ảnh 360° mờ phía sau */}
       <aside
-        className={`w-80 flex-shrink-0 bg-gray-100/95 backdrop-blur rounded-r-2xl shadow-xl overflow-y-auto p-5 flex flex-col gap-6 border border-gray-200/50 transition-transform duration-300 ease-out ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full absolute left-0 top-0 bottom-0 z-20"
+        className={`w-80 absolute left-0 top-0 bottom-0 z-20 flex flex-col gap-6 overflow-y-auto p-5 bg-[#c4b5a5]/30 backdrop-blur-md transition-transform duration-300 ease-out ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        {/* Nút đóng sidebar (≡) + Nút chuyển House Tour: ‹ House Tour 1 › */}
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setSidebarOpen(false)}
-            className="flex-shrink-0 w-9 h-9 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center text-gray-700"
-            aria-label="Đóng bảng lọc"
-          >
-            <span className="text-lg font-bold" style={{ fontFamily: "ui-sans-serif" }}>≡</span>
-          </button>
-          <Link
-            href={`/house-tour?tour=${houseTourIndex <= 1 ? 3 : houseTourIndex - 1}`}
-            className="flex-shrink-0 w-9 h-9 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center text-gray-700 font-bold"
-            aria-label="House Tour trước"
-          >
-            ‹
-          </Link>
-          <span className="flex-1 text-center text-sm font-semibold text-gray-800">House Tour {houseTourIndex}</span>
-          <Link
-            href={`/house-tour?tour=${houseTourIndex >= 3 ? 1 : houseTourIndex + 1}`}
-            className="flex-shrink-0 w-9 h-9 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center text-gray-700 font-bold"
-            aria-label="House Tour sau"
-          >
-            ›
-          </Link>
-        </div>
+        {/* Nút 3 gạch (≡) cùng hàng với Portfolio | Rooms */}
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(false)}
+              className="flex-shrink-0 w-9 h-9 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center text-gray-700"
+              aria-label="Đóng bảng lọc"
+            >
+              <span className="text-lg font-bold" style={{ fontFamily: "ui-sans-serif" }}>≡</span>
+            </button>
+            <div className="flex flex-1 min-w-0 rounded-xl overflow-hidden border border-white/40 bg-white/25 p-0.5 shadow-inner">
+              <button
+                type="button"
+                onClick={() => switchToPortfolio()}
+                className={`flex-1 min-w-0 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                  filterMode === "portfolio" ? "bg-teal-500 text-white shadow" : "text-slate-700 hover:bg-white/70"
+                }`}
+              >
+                Portfolio
+              </button>
+              <button
+                type="button"
+                onClick={() => switchToRooms()}
+                className={`flex-1 min-w-0 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                  filterMode === "rooms" ? "bg-teal-500 text-white shadow" : "text-slate-700 hover:bg-white/70"
+                }`}
+              >
+                Rooms
+              </button>
+            </div>
+          </div>
 
-        {/* 3 nút lọc: Trong nhà / Ngoài nhà / Phòng */}
-        <div className="flex flex-col gap-2">
-          <SectionTitle title="Lọc" showInfo={false} />
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => switchFilter("trong-nha")}
-              className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                roomFilter === "trong-nha"
-                  ? "bg-teal-500 text-white shadow"
-                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-              }`}
+          {filterMode === "portfolio" && (
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-800 w-14 flex-shrink-0" style={{ textShadow: "0 0 1px rgba(255,255,255,0.9)" }}>Section</span>
+                <div className="flex rounded-xl overflow-hidden border border-white/40 bg-white/25 p-1 shadow-inner">
+                  <button
+                    type="button"
+                    onClick={() => switchToPortfolio("exterior")}
+                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                      portfolioSection === "exterior" ? "bg-teal-500 text-white shadow" : "text-slate-700 hover:bg-white/70"
+                    }`}
+                  >
+                    Exterior
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => switchToPortfolio("interior")}
+                    className={`flex-1 px-3 py-2 rounded-lg text-sm font-semibold transition-colors ${
+                      portfolioSection === "interior" ? "bg-teal-500 text-white shadow" : "text-slate-700 hover:bg-white/70"
+                    }`}
+                  >
+                    Interior
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {filterMode === "rooms" && (
+            <div className="flex flex-col gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-800" style={{ textShadow: "0 0 1px rgba(255,255,255,0.9)" }}>Category</span>
+              <div className="flex flex-wrap gap-1.5">
+                {(Object.keys(ROOM_CATEGORIES) as RoomCategoryKey[]).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => switchToRooms(key)}
+                    className={`px-2.5 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      roomCategory === key ? "bg-teal-500 text-white shadow-sm" : "bg-white/60 text-gray-700 hover:bg-white/80 border border-gray-200/60"
+                    }`}
+                  >
+                    {ROOM_CATEGORIES[key].label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* House 12/12 — nằm dưới phần Filter */}
+          <div className="flex items-center gap-2">
+            <Link
+              href={`/house-tour?tour=${houseTourIndex <= 1 ? TOTAL_HOUSES : houseTourIndex - 1}`}
+              className="flex-shrink-0 w-9 h-9 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center text-gray-700 font-bold"
+              aria-label="House Tour trước"
             >
-              Trong nhà
-            </button>
-            <button
-              type="button"
-              onClick={() => switchFilter("ngoai-nha")}
-              className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                roomFilter === "ngoai-nha"
-                  ? "bg-teal-500 text-white shadow"
-                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-              }`}
+              ‹
+            </Link>
+            <span className="flex-1 text-center text-sm font-bold text-slate-800" style={{ textShadow: "0 0 1px rgba(255,255,255,0.9)" }}>
+              {filterMode === "rooms" ? (ROOMS.find((r) => r.id === room)?.label ?? room) : `House ${houseTourIndex}/${TOTAL_HOUSES}`}
+            </span>
+            <Link
+              href={`/house-tour?tour=${houseTourIndex >= TOTAL_HOUSES ? 1 : houseTourIndex + 1}`}
+              className="flex-shrink-0 w-9 h-9 rounded-lg bg-gray-200 hover:bg-gray-300 flex items-center justify-center text-gray-700 font-bold"
+              aria-label="House Tour sau"
             >
-              Ngoài nhà
-            </button>
-            <button
-              type="button"
-              onClick={() => switchFilter("phong")}
-              className={`px-4 py-2.5 rounded-xl text-sm font-medium transition-colors ${
-                roomFilter === "phong"
-                  ? "bg-teal-500 text-white shadow"
-                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-              }`}
-            >
-              Phòng
-            </button>
+              ›
+            </Link>
           </div>
         </div>
 
-        {/* ROOM — chỉ hiện phòng theo filter đã chọn */}
+        {/* Room list — pills theo filter (Portfolio: Exterior | Interior; Rooms: category) */}
         <div>
           <SectionTitle title="Room" />
           <div className="flex flex-wrap gap-2">
@@ -491,23 +560,6 @@ export default function HouseTourClient() {
           </div>
         </div>
 
-        {/* Collection */}
-        <div>
-          <SectionTitle title="Collection" />
-          <div className="grid grid-cols-2 gap-2">
-            {COLLECTIONS.map((c) => (
-              <PillButton
-                key={c.label}
-                active={collection === c.label}
-                onClick={() => !c.locked && setCollection(c.label)}
-                locked={c.locked}
-              >
-                {c.short}
-              </PillButton>
-            ))}
-          </div>
-        </div>
-
         <button
           type="button"
           className="mt-auto w-full py-3 rounded-xl bg-teal-500 text-white font-semibold hover:bg-teal-600 transition-colors shadow"
@@ -516,36 +568,49 @@ export default function HouseTourClient() {
         </button>
       </aside>
 
-      {/* Main Viewport */}
-      <main className="flex-1 relative flex flex-col min-h-0">
-        {/* Top bar - playback (giống rainbow-telaviv: Play = tự xoay 360°, Pause = dừng) */}
+      {/* Main Viewport — full màn hình, nằm dưới sidebar để ảnh 360° hiện xuyên qua sidebar trong suốt */}
+      <main className="absolute inset-0 flex flex-col min-h-0 min-w-0">
+        {/* Top bar: chiều quay | Play/Pause | << (giảm tốc) | tốc độ | >> (tăng tốc) */}
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1 bg-[#e8e4df] rounded-full px-2 py-1.5 shadow-lg border border-gray-300/50">
           <button
             type="button"
             onClick={() => setRotateDirection((d) => (d === 1 ? -1 : 1))}
             className={`p-2 rounded-full hover:bg-white/50 ${rotateDirection === -1 ? "bg-teal-500/20 text-teal-700" : "text-gray-600 hover:text-gray-900"}`}
-            aria-label={rotateDirection === 1 ? "Đổi chiều quay (hiện tại: thuận)" : "Đổi chiều quay (hiện tại: ngược)"}
+            aria-label={rotateDirection === 1 ? "Đổi chiều quay" : "Đổi chiều quay"}
             title={rotateDirection === 1 ? "Chiều thuận · Bấm để quay ngược" : "Chiều ngược · Bấm để quay thuận"}
           >
             {rotateDirection === 1 ? "↻" : "↺"}
           </button>
           <button
             type="button"
-            onClick={() => setIsPlaying(false)}
-            className={`p-2 rounded-full ${!isPlaying ? "bg-gray-700 text-white" : "text-gray-600 hover:bg-white/50"}`}
-            aria-label="Pause"
+            onClick={() => setIsPlaying((p) => !p)}
+            className={`p-2 rounded-full min-w-[2.25rem] ${isPlaying ? "bg-teal-500 text-white" : "bg-gray-700 text-white"}`}
+            aria-label={isPlaying ? "Dừng" : "Phát"}
+            title={isPlaying ? "Dừng" : "Phát"}
           >
-            ‖
+            {isPlaying ? "‖" : "▶"}
           </button>
           <button
             type="button"
-            onClick={() => setIsPlaying(true)}
-            className={`p-2 rounded-lg ${isPlaying ? "bg-teal-500 text-white" : "text-gray-600 hover:bg-white/50"}`}
-            aria-label="Play"
+            onClick={() => setSpeedMultiplier((s) => (s > 0.25 ? s / 2 : 0.25))}
+            className="p-2 text-gray-600 hover:text-gray-900 rounded-full hover:bg-white/50 font-bold text-sm"
+            aria-label="Giảm tốc độ một nửa"
+            title="Giảm tốc độ một nửa"
           >
-            ▶
+            &lt;&lt;
           </button>
-          <button type="button" className="p-2 text-gray-600 hover:text-gray-900 rounded-full hover:bg-white/50" aria-label="Next">▶▶</button>
+          <span className="px-1.5 text-xs font-medium text-gray-700 tabular-nums min-w-[2.5rem] text-center" title="Tốc độ hiện tại">
+            {speedMultiplier === 1 ? "1×" : speedMultiplier === 0.5 ? "0.5×" : "0.25×"}
+          </span>
+          <button
+            type="button"
+            onClick={() => setSpeedMultiplier((s) => (s < 1 ? Math.min(1, s * 2) : 1))}
+            className="p-2 text-gray-600 hover:text-gray-900 rounded-full hover:bg-white/50 font-bold text-sm"
+            aria-label="Tăng tốc độ gấp đôi"
+            title="Tăng tốc độ gấp đôi"
+          >
+            &gt;&gt;
+          </button>
         </div>
 
         {/* Right sidebar - Layout, 360°, Images, Spec., Download */}
@@ -593,14 +658,14 @@ export default function HouseTourClient() {
           />
         </div>
 
-        {/* 3D / Scene area — áp dụng màu từ Color Palette (overlay tint) */}
+        {/* 3D / Scene area — full màn hình, overlay màu từ Color Palette */}
         {(() => {
           const selectedColorHex = COLORS.find((c) => c.id === color)?.hex ?? "#1a1a1a";
           return (
-        <div className="flex-1 min-h-[400px] bg-gray-700 flex items-center justify-center relative overflow-hidden">
-          <div className="w-full h-full max-w-5xl min-h-[380px] flex items-center justify-center rounded-lg m-4 border border-gray-500/50 overflow-hidden bg-gray-600/50 relative">
+        <div className="absolute inset-0 flex items-center justify-center overflow-hidden">
+          <div className="w-full h-full flex items-center justify-center overflow-hidden relative">
             <div
-              className="absolute inset-0 pointer-events-none z-[1] rounded-lg mix-blend-multiply opacity-30"
+              className="absolute inset-0 pointer-events-none z-[1] mix-blend-multiply opacity-30"
               style={{ backgroundColor: selectedColorHex }}
               aria-hidden
             />
@@ -636,6 +701,7 @@ export default function HouseTourClient() {
                     roomLabel={label}
                     autoRotate={isPlaying}
                     rotateDirection={rotateDirection}
+                    speedMultiplier={speedMultiplier}
                     hotspotIconUrl="/uploads/b/153154201-360091501976169670/video_1_450.jpg"
                   />
                 );
@@ -647,6 +713,7 @@ export default function HouseTourClient() {
                   autoRotate={isPlaying}
                   rotateDirection={rotateDirection}
                   baseUrl={base}
+                  speedMultiplier={speedMultiplier}
                 />
               );
             })() : (
@@ -682,20 +749,22 @@ export default function HouseTourClient() {
             )}
           </div>
 
-          {/* Floor plan overlay — chỉ hiện khi bấm Layout; click từng phòng → view chính chuyển sang phòng đó */}
+          {/* Floor plan overlay — không che nút Layout/360°/Images bên phải; ảnh sơ đồ vừa khung, ít khoảng trống */}
           {rightView === "layout" && (
-          <div className="absolute right-6 top-6 bottom-24 w-72 bg-white/95 backdrop-blur rounded-xl shadow-xl border border-gray-200 overflow-hidden flex flex-col z-10">
-            <p className="text-sm font-semibold text-gray-800 px-3 pt-3 pb-2 border-b border-gray-100">Sơ đồ mặt bằng — bấm phòng để xem</p>
-            <div className="relative flex-1 min-h-[180px] bg-[#c4b5a5]">
-              <Image
-                src="/images/layout.jpeg"
-                alt="Floor plan"
-                fill
-                className="object-contain p-1"
-                sizes="288px"
-              />
+          <div className="absolute right-20 top-6 bottom-24 w-72 bg-white/95 backdrop-blur rounded-xl shadow-xl border border-gray-200 overflow-hidden flex flex-col z-[9]">
+            <p className="text-sm font-semibold text-gray-800 px-3 pt-2 pb-1.5 border-b border-gray-100 shrink-0">Sơ đồ mặt bằng — bấm phòng để xem</p>
+            <div className="relative w-full shrink-0 flex items-center justify-center bg-white py-1">
+              <div className="relative w-full aspect-[4/3] max-h-[200px]">
+                <Image
+                  src="/images/layout.jpeg"
+                  alt="Floor plan"
+                  fill
+                  className="object-contain"
+                  sizes="288px"
+                />
+              </div>
             </div>
-            <div className="flex flex-wrap gap-1.5 p-3 border-t border-gray-100">
+            <div className="flex flex-wrap gap-1.5 p-2.5 border-t border-gray-100 shrink-0">
               {FLOOR_PLAN_ROOMS.map((fp) => {
                 const isActive = room === fp.roomId || (fp.roomId === "bath1" && (room === "bath1" || room === "bath2"));
                 return (
