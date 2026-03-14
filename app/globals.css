@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Header luôn hiển thị (override theme ẩn .logo và .desktop-nav cho đến khi .fade-in) */
+body.fade-in .logo,
+body.fade-in .desktop-nav {
+  opacity: 1 !important;
+}
+
+/* Trên mobile vẫn hiện menu desktop (để có Our Work, About, Contact) */
+@media screen and (max-width: 992px) {
+  .birdseye-header .desktop-nav {
+    display: table-cell !important;
+    vertical-align: middle;
+  }
+  .birdseye-header .desktop-nav ul {
+    float: none;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 4px;
+  }
+  .birdseye-header .desktop-nav .wsite-menu-item {
+    padding: 8px 12px !important;
+    font-size: 11px !important;
+  }
+}
+
+/* Legacy theme overrides - from original site */
+.wsite-elements.wsite-not-footer:not(.wsite-header-elements) div.paragraph,
+.wsite-elements.wsite-not-footer:not(.wsite-header-elements) p,
+#wsite-content div.paragraph,
+#wsite-content p { font-family: "Open Sans", sans-serif !important; font-weight: 300 !important; }
+#wsite-content div.paragraph,
+#wsite-content p { color: #818181 !important; }
+#wsite-content h2,
+.wsite-headline { font-family: "Playfair Display", "Lato", sans-serif !important; }
+#wsite-title { font-family: "Playfair Display" !important; font-weight: 700 !important; }
+.wsite-headline,
+.wsite-header-section .wsite-content-title { font-family: "Playfair Display" !important; font-weight: 400 !important; }
+@media screen and (min-width: 767px) {
+  #wsite-title { font-size: 24px !important; }
+  .wsite-headline { font-size: 70px !important; }
+}
+
+/* Header: khi cuộn xuống — nền đen để chữ đọc rõ */
+.birdseye-header.header-scrolled {
+  background: rgba(0, 0, 0, 0.92) !important;
+  color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+}
+.birdseye-header.header-scrolled .wsite-menu-item {
+  color: #ffffff !important;
+}
+.birdseye-header.header-scrolled .wsite-menu-item:hover {
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+.birdseye-header.header-scrolled .hamburger span,
+.birdseye-header.header-scrolled .hamburger span::before,
+.birdseye-header.header-scrolled .hamburger span::after {
+  background: #ffffff !important;
+}
+
+/* House Tour: full viewport */
+.house-tour-fullscreen {
+  min-height: 100vh;
+  min-height: 100dvh;
+}

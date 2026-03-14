@@ -1,5 +1,0 @@
-# HTTrack Website Copier Cookie File
-# This file format is compatible with Netscape cookies
-.www.truyenartllc.com	TRUE	/	FALSE	1999999999	__cf_bm	YygXezbzfvcO55.gPc7npnyiGud3ucnbYeUFb0NY.30-1750149133-1.0.1.1-BRcJQbFx7GrLxtVx3L.KN5HLjb2LAqHi_qA4wPTkUt6RoU2WBdgvqHDraMmj9sSP.WcaS8edAm8zvfkIGBcD1f2vebkI8ELWodIaR29LeDs
-www.truyenartllc.com	TRUE	/	FALSE	1999999999	SameSite	None
-
